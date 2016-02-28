@@ -1,0 +1,142 @@
+#include <avr/io.h>
+#include <util/delay.h>
+#include <avr/interrupt.h>
+#include <avr/pgmspace.h>
+
+// Music Data
+#include "rtttl_data.h"
+
+// Which pin is the speaker connected to?
+#define SPEAKER_DDR		DDRB
+#define SPEAKER_PORT		PORTB
+#define SPEAKER			PB2
+
+// Magic!
+#define MAGIC_INDEX_PAUSE	63
+
+// Initialize speaker pin as output
+static void init_speaker(void) {
+	SPEAKER_DDR |= (1<<SPEAKER);
+}
+
+// Activate speaker PWM
+// alternatively, you can toggle the pin by yourself,
+// but that is more cpu time consuming!
+static void pwm_on(void) {
+	// Deactivate Timer1 interrupts
+	TIMSK1 = 0;
+
+	// CTC mode
+	TCCR1A |= (1<<COM1B1 | 1<<WGM11 | 1<<WGM10);
+
+	// Prescaler 8
+	TCCR1B = 1<<CS11 | 1<<WGM13 | 1<<WGM12;
+
+	// Timer reset
+	TCNT1 = 0;
+}
+
+// deactivate speaker pwm
+static void pwm_off(void) {
+	TCCR1A = 0;
+	TCCR1B = 0;
+}
+
+// Play melody num
+static void music(uint8_t num) {
+	
+	uint8_t curDuration = 0;
+	
+	// Read jump target for array
+	uint16_t i = pgm_read_word(&(melody_targets[num]));
+
+	// first byte of each melody is the default duration
+	uint8_t defaultDuration = pgm_read_byte(&(melodies[i]));
+	i++;
+
+	// second byte of each melody is the default bpm
+	uint8_t defaultBPM = pgm_read_byte(&(melodies[i]));
+	i++;
+
+	while(pgm_read_byte(&(melodies[i])) != 0x00 && pgm_read_byte(&(melodies[i+1])) != 0x00) {
+
+		uint16_t dauer_ms;
+
+		// if last bit is set, next byte is customDuration byte
+		if(pgm_read_byte(&(melodies[i])) & 0x01) {
+			curDuration = pgm_read_byte(&(melodies[i+1]));
+		} else {
+			curDuration = defaultDuration;
+		}
+
+		// REPLACE THIS WITH FLOATING POINT IF PROGRAM DOESNT WORK	
+		dauer_ms = (((60000 / defaultBPM) * defaultDuration) / curDuration);
+
+		// note is dotted if second bit is set
+		if(pgm_read_byte(&(melodies[i])) & 0x02) {
+			dauer_ms = dauer_ms + (dauer_ms / 2);
+		}
+
+		// array index (first 6 bit) and duration
+		// if index is 63 (MAGIC_INDEX_PAUSE) then the note is a pause
+		if(pgm_read_byte(&(melodies[i])) / 4 != MAGIC_INDEX_PAUSE) {
+	
+			uint16_t halbe_periodendauer_us = pgm_read_word(&(halbe_periodendauern[pgm_read_byte(&(melodies[i])) / 4]));
+
+			// IF YOU DO NOT NEED HIGH PERFORMANCE, THIS
+			// PWM PART CAN BE REPLACED BY MANUAL TOGGLING
+			// THE SPEAKER PIN!
+
+			pwm_on();
+			
+			// ratio of OCR1A and OCR1B is duty cycle of PWM
+			// can be used for "pitching"
+			OCR1A = 2 * (halbe_periodendauer_us * 2) / 3;
+			OCR1A = 2 * halbe_periodendauer_us;
+			OCR1B = halbe_periodendauer_us;
+
+			// THIS PART WAITS "dauer_ms" MILLISECONDS USING A TIMER
+			// CAN BE REPLACED WITH A BUSY LOOP USING "_delay_ms"
+			clock = 0;
+			while(clock < dauer_ms);
+
+			pwm_off();
+
+		} else {
+			pwm_off();
+
+			clock = 0;
+			while(clock < dauer_ms);
+		}
+
+		// if there is a custom duration byte, next note is in the byte after that
+		if(pgm_read_byte(&(melodies[i])) & 0x01) {
+			i++;
+		}
+
+		i++;
+
+	}
+}
+//]]
+
+int main(void) {
+
+	// ...
+	
+	init_speaker();
+
+	// ...
+
+	while(1) {
+
+		for(i=0; i<MELODIES; i++) {
+			music(i);
+		}
+
+	}
+
+	return 0;
+}
+
+

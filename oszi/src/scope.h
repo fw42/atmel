@@ -1,0 +1,36 @@
+#define LED1_PORT	PORTC
+#define LED1_DDR	DDRC
+#define LED1		PC4
+
+#define LED2_PORT	PORTB
+#define LED2_DDR	DDRB
+#define LED2		PB2
+
+#define LED3_PORT	PORTD
+#define LED3_DDR	DDRD
+#define LED3		PD4
+
+#define LED4_PORT	PORTB
+#define LED4_DDR	DDRB
+#define LED4		PB0
+
+#define TASTER1_PORT	PORTC
+#define TASTER1_DDR	DDRC
+#define TASTER1_PIN	PINC
+#define TASTER1		PC5
+
+#define TASTER2_PORT	PORTB
+#define TASTER2_DDR	DDRB
+#define TASTER2_PIN	PINB
+#define TASTER2		PB4
+
+#define TASTER3_PORT	PORTB
+#define TASTER3_DDR	DDRB
+#define TASTER3_PIN	PINB
+#define TASTER3		PB3
+
+#define TASTER4_PORT	PORTB
+#define TASTER4_DDR	DDRB
+#define TASTER4_PIN	PINB
+#define TASTER4		PB5
+

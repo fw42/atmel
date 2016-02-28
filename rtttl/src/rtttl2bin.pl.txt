@@ -1,0 +1,247 @@
+#!/usr/bin/perl
+# vim:foldmethod=marker:foldmarker=#[[,#]]
+#####################################################################################
+# rtttl2bin.pl - Florian Weingarten <flo@hackvalue.de>                              #
+# Konvertiert Nokia RTTTL Klingeltöne in ein proprietäres (platzsparenderes)        #
+# Binärformat, siehe unten                                                          #
+#####################################################################################
+
+use warnings;
+use strict;
+use Switch;
+
+my $file = "rtttl_data.h";
+
+#####################################################################################
+# Melodieformat (1+n+1 Byte)                                                        #
+# * Erstes Byte: Default Duration (als uint8_t)                                     #
+# * Restlichen Bytes: Noten (und eventuell Längen)                                  #
+# * Letztes Byte: Nullterminierung                                                  #
+#                                                                                   #
+# Notenformat                                                                       #
+# * 6 Bits für Array Index (0 < i < 47), wobei 0b111111=63 bedeutet, dass die Note  #
+#   eine Pause ist                                                                  #
+# * 1 Bit für Punktierung (falls gesetzt, dann Note 1.5 mal so lang spielen)        #
+# * 1 Bit für customDuration (falls gesetzt, folgt in dem nächsten Byte die Länge   #
+#####################################################################################
+
+my @frequencies = (	 
+#[[
+# Frequenztabelle für Töne
+# hieraus wird eine Tabelle mit (halben) Periodendauern erstellt
+# (Die Oktaven 5 bis 8 werden nicht unterstützt von RTTTL, also
+# müssen auch die zugehörigen Werte nicht gespeichert werden)
+#
+#	   C,   C#,    D,   D#,    E,    F,   F#,    G,   G#,    A,   A#,    B
+	 262,  277,  294,  311,  330,  349,  370,  392,  415,  440,  466,  494, # Oktave 5
+	 523,  554,  587,  622,  659,  698,  740,  784,  831,  880,  932,  988, # Oktave 6
+	1046, 1109, 1175, 1244, 1328, 1397, 1480, 1568, 1661, 1760, 1865, 1975, # Oktave 7
+	2093, 2217, 2349, 2489, 2637, 2794, 2960, 3136, 3322, 3520, 3729, 3951  # Oktave 8
+);
+#]]
+
+my @melodies = (
+#[[
+	"Jingle Bells:d=4,o=5,b=216:d,b,a,g,2d.,8d,8d,d,b,a,g,1e,e,c6,b,a,1f#,d6,d6,c6,a,1b,d,b,a,g,1d,d,b,a,g,2e.,e,e,c6,b,a,d6,d6,d6,d6,e6,d6,c6,a,2g.,p,b,b,2b,b,b,2b,b,d6,g.,8a,1b,c6,c6,c.6,8c6,c6,b,b,8b,8b,b,a,a,b,2a,2d6,b,b,2b,b,b,2b,b,d6,g.,8a,1b,c6,c6,c.6,8c6,c6,b,b,8b,8b,d6,d6,c6,a,g,d6,g6,p,d,b,a,g,2d.,8d,8d,d,b,a,g,1e,e,c6,b,a,1f#,d6,d6,c6,a,1b,d,b,a,g,1d,d,b,a,g,2e.,e,e,c6,b,a,d6,d6,d6,d6,e6,d6,c6,a,2g.,p,b,b,2b,b,b,2b,b,d6,g.,8a,1b,c6,c6,c.6,8c6,c6,b,b,8b,8b,b,a,a,b,2a,2d6,b,b,2b,b,b,2b,b,d6,g.,8a,1b,c6,c6,c.6,8c6,c6,b,b,8b,8b,d6,d6,c6,a,g,d6,g6",
+	"Silent Nights:d=4,o=5,b=101:f.,8g,f,2d,p,f.,8g,f,2d.,2c6,c6,2a.,2a#,a#,2f,p,2g,g,a#.,8a,g,f.,8g,f,2d,p,2g,g,a#.,8a,g,f.,8g,f,2d.,2c6,c6,d#.6,8c6,a,2a#.,2d6,p,a#,f,d,f.,8d#,c,2a#.4,2p,8p,16p,32p,f.,8g,f,2d.,f.,8g,f,2d.,2c6,32p,c6,2a.,2a#,a#,2f,p,2g,g,a#.,8a,g,f.,8g,f,2d,p,2g,g,a#.,8a,g,f.,8g,f,2d.,2c6,c6,d#.6,8c6,a,2a#.,2d.6,a#,f,d,f.,8d#,c,1a#.4",
+	"Alle Jahre wieder:d=4,o=5,b=100:16a.,32p,8g.,16p,8f.,32p,2e,32p,d.,8p,8c,16p,32p,8d,32p,16e.,32p,8f.,16p,e,2d.,8p,16p,32p,e,32p,8g.,16p,8a.,16p,8g,8p,c.6,8p,8b,8p,8a,8p,8g,8p,8f,8e,8f.,16p,8g,8p,2e.,1p,8c.,16p,8e,8p,8f,8p,8e,8p,a.,8p,8g,8p,8f,8p,8e.,16p,16d.,32p,16c.,32p,8d,8p,8d,8p,2c,2p,g.,8a,g,f,2e,2d,c,16d.,32p,16e.,32p,f,e,1d,e,g,a,g,2c6,b,a,8g.,16p,16f.,32p,8e,f,g,2e.,p,g,16f.,32p,8e,f,g,1e",
+	"Ihr Kinderlein kommet:d=4,o=5,b=100:8f.,16p,f.,8p,8d.,16p,8f.,16p,f.,8p,8d.,16p,8f.,16p,d#.,8p,8c.,16p,8d#.,16p,2d,p,8f.,16p,f.,8p,8d.,16p,8f.,16p,f.,8p,8d.,16p,8f.,16p,d#.,8p,8c.,16p,8d#.,16p,2d,p,8d.,16p,c.,8p,8c.,16p,8c.,16p,d#.,8p,8d#.,16p,8d#.,16p,d.,8p,8d.,16p,8d.,16p,2g,p,8g.,16p,f.,8p,8f.,16p,8f.,16p,a#.,8p,8f.,16p,8d.,16p,f.,8p,8d#.,16p,8c.,16p,2a#4",
+	"Little Drummer Boy:d=4,o=5,b=128:2f.,g,2a,8a.,16p,a,16a#.,32p,16a,16p,a#,1a,2p,p,f,f,g,a,a,32p,8a.,32p,a,16a#,16p,16a,16p,8a#,8p,1a.,p,g,a,a#,c6,32p,8c.6,16p,c6,d6,16c6,32p,16a#.,32p,a,1g.,p,g,a,a#,c6,c6,c6,d6,16d#6,16p,16d6,16p,c6,2a#,16d6,16p,32c6,16p,a#,32p,2a,16c6,16p,16a#,16p,a,1g,2p,2f.,g,a,a,8a.,16p,32p,a,16a#,32p,16a.,16p,8a#,16p,32p,1a,2p,8g,8f,g,32p,1f.",
+	"We wish you a merry christmas:d=4,o=5,b=144:d#,g#,8g#,8a#,8g#,8g,f,8f.,16p,f,a#,8a#,8c6,8a#,8g#,g,8d#.,16p,d#,c6,8c6,8c#6,8c6,8a#,g#,8f.,16p,8d#,8d#,8f.,16p,8a#.,16p,8g.,16p,2g#,d#,g#,8g#,8a#,8g#,8g,f,8f.,16p,f,a#,8a#,8c6,8a#,8g#,g,8d#.,16p,d#,c6,8c6,8c#6,8c6,8a#,g#,8f.,16p,8d#,8d#,8f.,16p,8a#.,16p,8g.,16p,2g#,d#,g#,g#,g#,2g,g,g#,g,f,2d#,a#,c6,a#,g#,d#6,d#,8d#,8d#,8f.,16p,8a#.,16p,8g.,16p,2g#",
+	"Oh Tannenbaum:d=4,o=5,b=85:d6,32p,8g6,16p,16g6,32p,g6,8p,32p,16a.6,32p,8b6,16p,32p,32b6,32p,b6,8p,32p,16b.6,32p,8a6,32p,8b6,c7,32p,f#6,32p,a6,g6,8p,16p,16d.7,32p,16d.7,32p,8b6,32p,e.7,32p,16d.7,32p,8d7,32p,16c.7,32p,c.7,32p,16c.7,32p,8c7,32p,16a.6,32p,d.7,32p,8c7,32p,8c7,16b.6,16p,b.6,32p,8d6,8g6,16p,32p,32g6,32p,g.6,32p,16a.6,32p,8b6,16p,32p,32b6,32p,b6,8p,32p,8b6,32p,16a.6,32p,16b.6,32p,c7,32p,f#6,32p,a6,32p,g6",
+	"Kling Gloeckchen:d=4,o=5,b=100:2d6,b,c6,8d6,8e6,8d6,8e6,2d6,2c6,a,d6,1b,2d6,b,c6,8d6,8e6,8d6,8e6,2d6,2c6,a,d6,1b,a,a,b,g,2b,2a,c6,c6,d6,a,2c6,2b,a,a,b,2d6,a.,8p,b,e6,d6,c#6,2e6,d.6,8p,2d6,b,c6,8d6,8e6,8d6,8e6,2d6,2c6,a,d6,32p,2b.",
+	"Oh du Froehliche:d=4,o=5,b=120:2g,2a,g.,8f,e,f,2g,2a,g.,8f,e,f,2g,2g,2a,b,c6,2b,2a,2g.,p,d.,8e,d,e,f.,8g,2f,e.,8f,e,f,g.,8a,2g,c6,b,a,g,c6,a,g,f,2e,2d,1c",
+	"Schneefloecken Weissroeckchen:d=4,o=5,b=120:8a,8a#,c6,c6,d6,g,g,8g,8a,a#,a#,c6,2a,8a,8a#,c6,c6,f6,e6,d6,8c6,8a#,a,a#,g,2f",
+	"Morgen kommt der Weihnachtsmann:d=4,o=5,b=70:8g,8g,8d6,8d6,8e6,8e6,d6,8c6,8c6,8b,8b,a,g,8d6,8d6,8c6,8c6,8b,8b,a,8d6,8d6,8c6,8c6,8b,8b,a,8g,8g,8d6,8d6,8e6,8e6,d6,8c6,8c6,8b,8b,a,g",
+	"Leise rieselt der Schnee:d=4,o=5,b=100:2b6,b6,a6,b6,a6,1g.6,2g6,e6,g6,f#6,e6,1d.6,a6,g#6,a6,c7,b6,a6,1g.6,a.6,16e6,16p,e6,f#6,e6,f#6,1g.6,2b6,b6,a6,b6,a6,1g.6,2g6,e6,g6,f#6,e6,1d.6,a6,g#6,a6,c7,b6,a6,1g.6,a.6,16e6,16p,e6,f#6,e6,f#6,1g.6",
+	"Lasst uns froh und munter sein:d=4,o=5,b=100:8g.,16p,8g.,16p,16g.,32p,16a.,32p,16g.,32p,16f.,32p,8e.,16p,8e.,16p,8e.,p,16p,8f.,16p,8f.,16p,16f.,32p,16g.,32p,16f.,32p,16e.,32p,8d.,16p,8d.,16p,8d.,p,16p,8c.,16p,8d.,16p,8e.,16p,8f.,16p,16g.,32p,16a.,32p,16g.,32p,16a.,32p,g.,8p,8c.6,16p,8g.,16p,16g.,32p,16a.,32p,16g.,32p,16f.,32p,8e.,16p,8d.,16p,g.,8p,8c.6,16p,8g.,16p,16g.,32p,16a.,32p,16g.,32p,16f.,32p,8e.,16p,8d.,16p,c.",
+	"Wie schoen, dass du geboren bist:d=4,o=5,b=120:40p,8e.,30p.,8a.,30p.,3a,13p,15g.,40p,8f#.,30p.,8a.,30p.,8a.,9p.,15f#.,40p,8e.,30p.,8f#.,30p.,8g.,30p.,8b.,30p.,8b.,30p.,8a.,30p.,8a.,9p.,15f#.,40p,8e.,30p.,8a.,30p.,3a,13p,15g.,40p,8f#.,30p.,8a.,30p.,8a.,9p.,15f#.,40p,8a,14p,17a,255p,65p,8a,14p,17g,255p,65p,7f#,27p,30g.,80p,7f#,27p,30e.,80p,8d.,2p,15a,60p,15d6,60p,15f#6,60p,7a6,27p,30a.6,80p,7a6,27p,30g.6,80p,7f#6,27p,30g.6,80p,7f#6,27p,30e.6,80p,8d.6,30p.,8a.,30p.,8d.6,3p,7a,27p,30a.,80p,7a,27p,30a.,80p,8a.,30p.,8f#.,30p.,7g,27p,30a.,80p,7g,27p,30f#.,80p,8e.,3p,7g,27p,30g.,80p,7g,27p,30g.,80p,8g.,30p.,8e.,30p.,7f#,27p,30g.,80p,7f#,27p,30e.,80p,8d.,3p,7a,27p,30a.,80p,7a,27p,30a.,80p,8a.,30p.,8f#.,30p.,7g,27p,30f#.,80p,7g,27p,30a.,80p,8b.,3p,15b.,17p.,30b.,80p,7a,27p,30g.,80p,8f#.,30p.,8d.,30p.,7e,27p,30e.,80p,7d,27p,30c#.,80p,8a.,3p,7b,27p,30b.,80p,7a,27p,30g.,80p,8f#.,30p.,8d.,30p.,7g,27p,30g.,80p,7f#,27p,30e.,80p,8d.",
+	"Happy Birthday:d=4,o=5,b=125:8d,8d,e,d,g,2f#,8d,8d,e,d,a,2g,8d,8d,d6,b,g,2f#,e,8c6,8c6,b,g,a,g,p",
+
+);
+#]]
+
+sub parse_melodies {
+#[[
+	my $res = "";
+	my $total = 0;
+
+	print "\n Generating " . ($#melodies+1) . " melodies...\n";
+
+	$res .= "\#define MELODIES " . ($#melodies+1) . "\n\n";
+
+	$res .= "const uint8_t melodies[] PROGMEM = {\n";
+#	$res .= "unsigned char melodies[] = {\n";
+
+	my @targets;
+	my $j = 0;
+	my $adr = 0;
+
+	foreach my $melody(@melodies) {
+
+		$targets[$j++] = $adr;
+
+		$melody =~ m/^([\w,\s]+).*$/;
+		my $title = $1;
+		my $i=0;
+
+		$res .= "\n\t// $title\n\t";
+		foreach my $byte (split(/\\/, parse_melody($melody))) {
+			# print $byte;
+			$res .= "0$byte,";
+			$adr++;
+			if($i % 8 == 0) {
+				$res .= "\n\t";
+			}
+			$i++;
+		}
+		$adr++;
+		$res .= "\n";
+
+		print " * $title ($i byte)\n";
+		$total += $i;
+	}
+	$res .= "\n\t0x00\n";
+	$res .= "};\n\n";
+
+	$res .= "const uint16_t melody_targets[] PROGMEM = { ";
+	$res .= "$_, " foreach(@targets);
+	$res .= "};\n";
+		
+	print "\n (Total sound data: " . ($total+1) . " bytes)\n\n";
+
+	return $res;
+}
+#]]
+
+sub parse_melody {
+#[[
+	my $res = "";
+
+	my($name,$defaults,$nodes) = split(/:/,$_[0]);
+
+	my $defaultDuration;
+	my $defaultOctave;
+	my $defaultBPM;
+
+	# Default Werte parsen
+	$defaults =~ m/d=(\d+),o=(\d+),b=(\d+)/;
+	($defaultDuration,$defaultOctave,$defaultBPM) = ($1,$2,$3);
+
+	$res .= sprintf "x%02x,", $defaultDuration;
+	$res .= sprintf "0x%02x", $defaultBPM;
+
+	foreach my $node (split(/,/,$nodes)) {
+		my $curDuration = $defaultDuration;
+		my $curOctave = $defaultOctave;
+		my $curSharp = 0;
+		my $curDotted = 0;
+		my $curNote;
+#		my $time_ms;
+
+		# (optional) Ziffern (duration)
+		# Buchstabe (Ton)
+		# (optional) # oder _ für Halbtonerhöhung
+		# (optional) . für Punktierung
+		# (optional) Oktave
+		$node =~ m/^(\d*)(\w)(#|_|)(|\.|)(\d*)$/;
+
+		$curDuration = $1 if($1);
+		$curNote = $2 if($2);
+		$curSharp = 1 if($3);
+		$curDotted = 1 if($4);
+		$curOctave = $5 if($5);
+
+		if($curDuration > 255) {
+			print "---> WOOT! $1 ($node) <-----\n";
+		}
+
+#		$time_ms = int( (((1000 * 60.0 / $defaultBPM) * $defaultDuration) / $curDuration) ); 
+	
+		my $i=0;
+	
+		switch(lc($curNote)) {
+			case "a"	{ $i= 9; }	# A
+			case "b"	{ $i=11; }	# B
+			case "c"	{ $i= 0; } 	# C
+			case "d"	{ $i= 2; }	# D
+			case "e"	{ $i= 4; }	# E
+			case "f"	{ $i= 5; }	# F
+			case "g"	{ $i= 7; }	# G
+			case "p"	{ $i=63; }	# Pause (0b111111)
+		}
+
+		if($curSharp) {
+			$i++;
+		}
+
+		# magic
+		if($curOctave < 5) { $curOctave = 5; }
+
+		my $arrayIndex = $i + ($curOctave - 5) * 12;
+
+		my $tmp = ( ($arrayIndex * 4) + ($curDotted * 2) + (($defaultDuration == $curDuration) ? 0 : 1) );
+
+		# debug stuff (some rtttl files with invalid octaves generate negative array indices, resulting
+		# in weird sounds)
+		if($tmp < 0) {
+			print "ERROR: $node: $arrayIndex = $i + ($curOctave - 5) * 12 \t [ $tmp ]\n";
+		}
+
+		$res .= sprintf "\\x%02x" ,$tmp;
+
+		# Falls wir nicht die Default Länge benutzen, dann Länge im nächsten Byte mitgeben
+		if($defaultDuration != $curDuration) {
+			if($curDuration < 256) {
+				$res .= sprintf "\\x%02x", $curDuration;
+			} else {
+				$res .= "\\xff";
+			}
+		}
+
+#		print "i=$arrayIndex, curDur=$curDuration, time_ms=$time_ms \n";
+
+	}
+
+	$res .= "\\x00";
+	$res .= "\\x00";
+
+	return $res;
+}
+#]]
+
+sub print_periodendauern {
+#[[
+	print "\n Generating frequency tables ...\n";
+
+	my @tmp;
+	my $i;
+	my $res = "";
+
+	$res .= "\n";
+
+	$res .= "const uint16_t halbe_periodendauern[] PROGMEM = {\n";
+#	print "unsigned short periodendauern[] = {\n";
+
+	for($i=0; $i <= $#frequencies; $i++) {
+
+		if($i % 12 == 0) {
+			$res .= "\t";
+		}
+
+		$res .= sprintf "%4d,", 1000000 / $frequencies[$i] / 2;
+
+		if($i % 12 == 11) {
+			$res .= "\n";
+		}
+
+	}
+	$res .= "};\n\n";
+}
+#]]
+
+open(FILE, ">$file");
+print FILE print_periodendauern();
+print FILE parse_melodies();
+close(FILE);
+print " Data saved to $file\n\n";
