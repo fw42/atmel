@@ -152,8 +152,8 @@ Things you will need:
  <li>Maxim MAX232 Level shifter (<a href="datasheets/max232.pdf">datasheet</a>)</li>
  <li>7805 voltage regulator (<a href="datasheets/7805.pdf">datasheet</a>)</li>
  <li>six 100 nF ceramic capacitors</li>
- <li>one 47 µF electrolytic capacitor</li>
- <li>five 1 µF electrolytic capactors</li>
+ <li>one 47 ÂµF electrolytic capacitor</li>
+ <li>five 1 ÂµF electrolytic capactors</li>
  <li>three 10 k&Omega; resistors</li>
  <li>five LEDs (power, case light, three stackmat status LEDs)</li>
  <li>resistors for the five LEDs (value depends on the LEDs! Look at the datasheet!)</li>
@@ -232,7 +232,7 @@ Command bytes:
      getting me started with microcontroller programming and for helping me
      <a href="images/scope.jpg">reverse engineer the stackmat signal</a>
      (I do not own an oscilloscope :-))</li>
- <li>... <a href="http://www.toomuchtimeonyourhands.co.uk/">Matt 'floater81' Burns</a> for his open source java stackmat display</li>
+ <li>... <a href="https://github.com/mattburns/areyoubillywhizz">Matt Burns</a> for his open source java stackmat display</li>
  <li>... the <a href="http://www.worldcubeassociation.org/">World Cube Association</a> for organizing all this great speedcubing events around the world</li>
  <li>... <a href="http://lkdesigns.de/">Lukas Kalkhoff</a>, for creating the <a href="images/cg">CG design proposals in Cinema 4D</a></li>
 </ul>
